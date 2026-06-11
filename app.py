@@ -16,10 +16,144 @@ HEADERS = {
     "X-Master-Key": JSONBIN_API_KEY
 }
 
-# Fallback mapping just in case the API call fails on first load
+# Your full historical mapping dictionary
 INITIAL_MAPPING = {
+    "20 lb Superset": "Arms, Shoulders",
+    "45 degree glute hyper": "Glutes, Hamstrings",
+    "45-Degree Glute Hyper": "Glutes/Hamstrings",
+    "45-Degree Glute Hypers": "Glutes/Hamstrings",
+    "45° Glute Hyper": "Glutes, Hamstrings",
+    "Ab Wheel": "Core",
+    "Abduction Machine": "Glutes",
+    "Arm Pyramid": "Arms",
+    "B-Stance DB RDL": "Hamstrings, Glutes",
+    "Back Squat": "Quads, Glutes",
+    "Banded Frog Pumps": "Glutes",
+    "Banded Glute Bridges": "Glutes",
+    "Barbell Curl": "Arms",
+    "Barbell Hip Thrust": "Glutes",
+    "Barbell RDL": "Hamstrings, Glutes",
+    "Belted Hip Thrust": "Glutes",
+    "Bench Press": "Chest, Shoulders, Arms",
+    "Bicep Cable Curl": "Biceps",
+    "Bicep Curl": "Biceps",
+    "Bicep Curls": "Biceps",
+    "Body Weight Lunges": "Quads, Glutes",
+    "Bodyweight": "Chest, Back, Arms",
+    "Cable Curls": "Arms",
+    "Cable Pulldown / Pushdown": "Back, Triceps",
+    "Chest Fly": "Chest",
+    "Chest Press": "Chest, Shoulders, Arms",
+    "Conventional Deadlift": "Glutes, Hamstrings, Back",
+    "Crunch Machine": "Core",
+    "Curl / Lateral / Press": "Biceps, Shoulders",
+    "Curl / Press / Lateral": "Biceps, Shoulders",
+    "DB Bent Over Row": "Back, Biceps",
+    "DB Bicep Curls": "Biceps",
+    "DB Curl": "Biceps",
+    "DB Deficit RDL": "Hamstrings, Glutes",
+    "DB Deficit SLDL": "Hamstrings, Glutes",
+    "DB Floor Press": "Chest, Triceps",
+    "DB Overhead Press": "Shoulders, Triceps",
+    "DB RDL (75 lb)": "Hamstrings, Glutes",
+    "DB RDL (Deficit)": "Hamstrings, Glutes",
+    "DB Seated Shoulder Press": "Shoulders, Triceps",
+    "DB Shoulder Press": "Shoulders, Triceps",
+    "DB Side Laterals": "Shoulders",
+    "DB Superset": "Arms, Shoulders",
+    "DB Superset (15lb)": "Arms, Shoulders",
+    "DB Superset (20lb)": "Arms, Shoulders",
+    "Deadlift": "Glutes, Hamstrings, Back",
+    "Deadlift (Demo)": "Glutes, Hamstrings, Back",
+    "Deadlifts": "Hamstrings/Glutes/Back",
+    "Deep Deficit DB RDL": "Hamstrings, Glutes",
+    "Deep Deficit Rear Lunge": "Glutes/Quads",
+    "Deep Goblet Squat": "Quads/Glutes",
+    "Deficit DB RDL": "Hamstrings, Glutes",
+    "Deficit Rear Lunges": "Glutes/Quads",
+    "Dumbbell Shoulder Press": "Shoulders/Triceps",
+    "Dumbbell Sumo Squat": "Glutes, Adductors",
+    "Elliptical": "Full Body",
+    "FST-7 Glute Machine": "Glutes",
+    "Farmer's Walk": "Full Body",
+    "GVT Glute Machine": "Glutes",
+    "Glute Bias Leg Press": "Quads, Glutes",
+    "Glute Bridge": "Glutes",
+    "Glute Hypers": "Glutes/Hamstrings",
+    "Glute Kickback": "Glutes",
+    "Glute Machine": "Glutes",
+    "Goblet Squat": "Quads, Glutes",
+    "Hack Squat": "Quads, Glutes",
+    "Hip Abduction": "Glutes",
+    "Hip Abduction Machine": "Glute Medius/Abductors",
+    "Hip Abductor": "Glutes",
+    "Hip Thrust": "Glutes",
+    "Isolation Ladders": "Arms",
+    "Kettlebell Step Ups": "Glutes, Quads",
+    "Kettlebell Step-Ups": "Glutes, Quads",
+    "Lat Pulldown": "Back, Arms",
+    "Laying Leg Curl": "Hamstrings",
+    "Leg Abduction Machine": "Glute Medius",
+    "Leg Extension": "Quads",
+    "Leg Extensions": "Quads",
+    "Leg Press": "Quads, Glutes",
+    "Leg Press (Glute-bias)": "Quads, Glutes",
+    "Leg extension": "Quads",
+    "Lunges": "Quads, Glutes",
+    "Lunges (30 lb)": "Quads, Glutes",
+    "Lying Leg Curl": "Hamstrings",
+    "MTS Ab Crunch": "Core",
+    "Machine Abduction": "Glutes",
+    "Machine Crunch": "Core",
+    "Machine Kickback": "Glutes",
+    "Machine Pec Fly": "Chest",
+    "Machine Press": "Chest, Shoulders",
+    "Machine Row": "Back, Arms",
+    "Pec Fly Machine": "Chest",
+    "Preacher Curl": "Biceps",
+    "Pull Downs": "Back, Lats",
+    "Pull Ups": "Back, Biceps",
+    "Pull-Ups": "Back, Arms",
+    "Pull-ups": "Back, Arms",
+    "Pulldown": "Back, Lats",
+    "Push Ups": "Chest, Triceps",
+    "Push-ups": "Chest, Shoulders, Arms",
+    "RDL": "Hamstrings, Glutes",
+    "RDL (Back-off)": "Hamstrings, Glutes",
+    "RDL (Barbell)": "Hamstrings, Glutes",
+    "RDL (Pump Work)": "Hamstrings, Glutes",
+    "RDLs": "Hamstrings, Glutes",
+    "Rear Lunge": "Glutes, Quads",
+    "Rear Lunges": "Glutes, Quads",
+    "Rear lunges": "Glutes, Quads",
+    "Rope Tricep Push Down": "Triceps",
+    "Row": "Back, Lats",
+    "Seated Row": "Back, Arms",
+    "Shoulder Press": "Shoulders, Arms",
+    "Single Leg Glute Bridge": "Glutes",
+    "Skull Crushers": "Triceps",
+    "Split Squat": "Quads/Glutes",
+    "Squat": "Quads, Glutes",
+    "Sumo Squats": "Glutes/Adductors",
+    "Superset: DB Bicep Curl": "Biceps",
+    "Superset: DB Deficit RDL": "Hamstrings, Glutes",
+    "Superset: DB Shoulder Press": "Shoulders/Triceps",
+    "Superset: DB Side Lateral": "Shoulders (Lateral Delt)",
+    "Superset: DB Sumo Squat": "Glutes, Adductors",
+    "Torso Rotation": "Core",
+    "Treadmill": "Full Body",
+    "Tricep Cable Pushdown": "Triceps",
+    "Tricep Press": "Triceps",
+    "Tricep Pushdown": "Triceps",
+    "Tricep Pushdowns": "Arms",
+    "Upper Body Push": "Chest, Shoulders, Arms",
     "Walking Lunge": "Quads, Glutes",
-    "Hack Squat": "Quads, Glutes"
+    "Walking Lunges": "Quads, Glutes",
+    "Weighted Ab Crunch": "Abs",
+    "Weighted Clam Shells": "Glute Medius/Abductors",
+    "Weighted Crunch": "Core",
+    "Weighted KB Step-Ups": "Glutes, Quads",
+    "Weighted Step-Ups": "Glutes, Quads"
 }
 
 def load_mapping():
@@ -110,9 +244,17 @@ def parse_workout_text(raw_text, current_mapping):
         return records
 
     # --- SCENARIO 2: Smashed Text ---
-    if any(re.match(r'^\d{2,3}[A-Za-z]', line) for line in lines):
+    # We check if lines look like "11Walking Lunge" (digits + letter)
+    # BUT we explicitly ignore lines like "45x10" to stop vertical logs from breaking!
+    def is_smashed_line(line):
+        starts_like_smashed = re.match(r'^\d{2,3}[A-Za-z]', line)
+        is_weight_reps = re.match(r'^\d+(?:\.\d+)?\s*x\s*\d+$', line, re.IGNORECASE)
+        return starts_like_smashed and not is_weight_reps
+
+    if any(is_smashed_line(line) for line in lines):
         smashed_pattern = re.compile(
-            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$'
+            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
+            re.IGNORECASE
         )
         for line in lines:
             match = smashed_pattern.search(line)
@@ -167,13 +309,15 @@ def parse_workout_text(raw_text, current_mapping):
             current_sets, current_notes = [], []
             current_tonnage = 0.0
             
+    # Save the final exercise at the end of the list
     save_current_exercise()
+    
     return records
 
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Workout Logger", layout="wide")
-st.title("🏋️ Workout Data Parser")
+st.title("🏋️ Workout Data Parser (Cloud Connected)")
 
 # Load our mapping dictionary from JSONBin
 current_mapping = load_mapping()
