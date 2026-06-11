@@ -2,71 +2,93 @@ import streamlit as st
 import pandas as pd
 import json
 import re
-import os
+import requests
 
-DATA_FILE = "workout_data.json"
-MAPPING_FILE = "body_parts_mapping.json"
+# --- JSONBin Configuration ---
+# Securely pulls your API key from Streamlit's dashboard secrets
+JSONBIN_API_KEY = st.secrets["JSONBIN_API_KEY"] 
+WORKOUT_BIN_ID = "6a2b09def5f4af5e29e1925d"
+MAPPING_BIN_ID = "6a2b099bda38895dfeb00e71"
 
-# A small starter dictionary based on your CSV. The app will add to this over time!
+BASE_URL = "https://api.jsonbin.io/v3/b/"
+HEADERS = {
+    "Content-Type": "application/json",
+    "X-Master-Key": JSONBIN_API_KEY
+}
+
+# Fallback mapping just in case the API call fails on first load
 INITIAL_MAPPING = {
-    "Walking Lunge": "Glutes/Quads",
-    "Hack Squat": "Quads/Glutes",
-    "Glute Machine": "Glutes",
-    "Leg Extension": "Quads",
-    "Hip Abduction": "Glutes",
-    "DB RDL (Deficit)": "Hamstrings, Glutes",
-    "Rear Lunge": "Glutes/Quads",
-    "Push-ups": "Chest, Shoulders, Arms",
-    "Pull-ups": "Back, Arms",
-    "Ab Wheel": "Core",
-    "DB Superset (15lb)": "Arms, Shoulders",
-    "Bench Press": "Chest, Shoulders, Arms",
-    "Machine Row": "Back, Arms",
-    "Deadlift (Demo)": "Glutes, Hamstrings, Back",
-    "Arm Pyramid": "Arms"
+    "Walking Lunge": "Quads, Glutes",
+    "Hack Squat": "Quads, Glutes"
 }
 
 def load_mapping():
-    """Loads the exercise-to-body-part mapping, or creates it if it doesn't exist."""
-    if os.path.exists(MAPPING_FILE):
-        with open(MAPPING_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return INITIAL_MAPPING.copy()
-    else:
-        # Create it for the first time
-        with open(MAPPING_FILE, "w") as f:
-            json.dump(INITIAL_MAPPING, f, indent=4)
+    """Loads the exercise mapping from JSONBin."""
+    try:
+        response = requests.get(BASE_URL + MAPPING_BIN_ID, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json().get("record", INITIAL_MAPPING)
+        else:
+            st.error(f"Failed to load mapping. Status: {response.status_code}")
+            return INITIAL_MAPPING.copy()
+    except Exception as e:
+        st.error(f"API Connection Error: {e}")
         return INITIAL_MAPPING.copy()
 
 def save_mapping(mapping_dict):
-    """Saves the updated mapping dictionary to the JSON file."""
-    with open(MAPPING_FILE, "w") as f:
-        json.dump(mapping_dict, f, indent=4)
+    """Overwrites the mapping bin with the newly learned exercises."""
+    try:
+        response = requests.put(BASE_URL + MAPPING_BIN_ID, headers=HEADERS, json=mapping_dict)
+        if response.status_code != 200:
+            st.error(f"Failed to save mapping. Status: {response.status_code}")
+    except Exception as e:
+        st.error(f"API Connection Error: {e}")
+
+def load_data():
+    """Loads the historical workout records from JSONBin."""
+    try:
+        response = requests.get(BASE_URL + WORKOUT_BIN_ID, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json().get("record", [])
+        else:
+            st.error(f"Failed to load workout data. Status: {response.status_code}")
+            return []
+    except Exception as e:
+        st.error(f"API Connection Error: {e}")
+        return []
+
+def save_data(new_records):
+    """Pulls existing data, appends the new records, and pushes it back to JSONBin."""
+    data = load_data()
+    data.extend(new_records)
+    
+    try:
+        response = requests.put(BASE_URL + WORKOUT_BIN_ID, headers=HEADERS, json=data)
+        if response.status_code != 200:
+            st.error(f"Failed to save workout data. Status: {response.status_code}")
+    except Exception as e:
+        st.error(f"API Connection Error: {e}")
 
 def get_target_body_parts(exercise_name, current_mapping):
-    """Finds the body part, or flags it if it's unknown."""
     ex_clean = exercise_name.strip().lower()
     
-    # Check for exact matches (case-insensitive)
+    # Exact match
     for known_ex, body_part in current_mapping.items():
         if known_ex.lower() == ex_clean:
             return body_part
             
-    # Check for partial matches (e.g., 'RDL' in 'DB RDL')
+    # Partial match
     for known_ex, body_part in current_mapping.items():
         if known_ex.lower() in ex_clean or ex_clean in known_ex.lower():
             return body_part
 
-    # If we get here, we don't know it. Prompt the user in the UI.
     return "❓ Needs Mapping"
 
 def parse_workout_text(raw_text, current_mapping):
     records = []
     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
     
-    # --- SCENARIO 1: Spreadsheet Paste (contains tabs) ---
+    # --- SCENARIO 1: Spreadsheet Paste ---
     if any('\t' in line for line in lines):
         for line in lines:
             cols = line.split('\t')
@@ -90,7 +112,7 @@ def parse_workout_text(raw_text, current_mapping):
     # --- SCENARIO 2: Smashed Text ---
     if any(re.match(r'^\d{2,3}[A-Za-z]', line) for line in lines):
         smashed_pattern = re.compile(
-            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core)(?:,\s*[A-Za-z]+)*)(.*)$'
+            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$'
         )
         for line in lines:
             match = smashed_pattern.search(line)
@@ -148,75 +170,64 @@ def parse_workout_text(raw_text, current_mapping):
     save_current_exercise()
     return records
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return []
-    return []
-
-def save_data(new_records):
-    data = load_data()
-    data.extend(new_records)
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Workout Logger", layout="wide")
 st.title("🏋️ Workout Data Parser")
 
-# Load our mapping dictionary into memory
+# Load our mapping dictionary from JSONBin
 current_mapping = load_mapping()
 
-st.markdown("Paste your workout notes below. The app handles **vertical logs**, **spreadsheet pastes**, or **smashed strings**.")
+st.markdown("Paste your workout notes below.")
 
-raw_input = st.text_area("Raw Workout Data", height=250)
+raw_input = st.text_area("Raw Workout Data", height=200)
 
 if st.button("Parse Data"):
     if raw_input:
         parsed_data = parse_workout_text(raw_input, current_mapping)
         if parsed_data:
             st.session_state['parsed_df'] = pd.DataFrame(parsed_data)
-            st.success("Data parsed! Review and edit the table below before saving.")
+            st.success("Data parsed! Review and edit the table below before saving to the cloud.")
         else:
             st.warning("Could not parse any exercises. Check your formatting.")
 
 if 'parsed_df' in st.session_state:
     st.markdown("### Review & Edit")
-    st.info("💡 If you see '❓ Needs Mapping' in the Target Body Parts column, simply type the correct body part into the cell. The app will remember it for next time!")
+    st.info("💡 If you see '❓ Needs Mapping', type the correct body part. The app will save it to your JSONBin for next time!")
     
     edited_df = st.data_editor(st.session_state['parsed_df'], num_rows="dynamic", use_container_width=True)
     
-    if st.button("Save to JSON"):
-        final_records = edited_df.to_dict(orient="records")
-        
-        # 1. Update our mapping file with any new body parts the user typed in
-        mapping_updated = False
-        for record in final_records:
-            exercise = record["Exercise"].strip()
-            body_part = record["Target Body Parts"].strip()
+    if st.button("Save to JSONBin"):
+        with st.spinner("Saving to the cloud..."):
+            final_records = edited_df.to_dict(orient="records")
             
-            # If it's a valid body part and not already in our dictionary, add it!
-            if body_part and body_part != "❓ Needs Mapping" and exercise not in current_mapping:
-                current_mapping[exercise] = body_part
-                mapping_updated = True
-        
-        if mapping_updated:
-            save_mapping(current_mapping)
-            st.toast("🧠 App learned new exercise mappings!")
+            # 1. Update mapping in the cloud if needed
+            mapping_updated = False
+            for record in final_records:
+                exercise = record["Exercise"].strip()
+                body_part = str(record["Target Body Parts"]).strip()
+                
+                if body_part and body_part != "❓ Needs Mapping" and exercise not in current_mapping:
+                    current_mapping[exercise] = body_part
+                    mapping_updated = True
+            
+            if mapping_updated:
+                save_mapping(current_mapping)
+                st.toast("🧠 New exercise mapping saved to the cloud!")
 
-        # 2. Save the actual workout data
-        save_data(final_records)
-        st.success(f"Successfully saved {len(final_records)} exercises to {DATA_FILE}!")
-        del st.session_state['parsed_df']
-        st.rerun()
+            # 2. Save the workout data to the cloud
+            save_data(final_records)
+            st.success("Successfully saved to JSONBin!")
+            del st.session_state['parsed_df']
+            st.rerun()
 
 st.divider()
-st.markdown("### Historical Data")
-history = load_data()
-if history:
-    st.dataframe(pd.DataFrame(history), use_container_width=True)
-else:
-    st.info("No data saved yet.")
+
+# Display historical data from the cloud
+st.markdown("### Historical Data (From JSONBin)")
+with st.spinner("Loading history..."):
+    history = load_data()
+    if history:
+        st.dataframe(pd.DataFrame(history), use_container_width=True)
+    else:
+        st.info("No data saved yet.")
