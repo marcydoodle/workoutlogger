@@ -218,6 +218,59 @@ def get_target_body_parts(exercise_name, current_mapping):
 
     return "❓ Needs Mapping"
 
+def unpack_superset(exercise_line, notes_line, week, day, current_mapping):
+    """
+    Breaks a complex superset string into individual exercises, calculates tonnage,
+    and returns a list of individual record dictionaries.
+    """
+    records = []
+    
+    # 1. Extract Sets and Weight from the notes line (e.g., "20 lbs each hand 3 sets")
+    sets = 1
+    weight_per_hand = 0.0
+    
+    sets_match = re.search(r'(\d+)\s*sets?', notes_line, re.IGNORECASE)
+    if sets_match:
+        sets = int(sets_match.group(1))
+        
+    lbs_match = re.search(r'(\d+(?:\.\d+)?)\s*lbs?', notes_line, re.IGNORECASE)
+    if lbs_match:
+        weight_per_hand = float(lbs_match.group(1))
+        
+    # Assume dumbbells (weight is doubled for total load)
+    total_weight = weight_per_hand * 2
+    
+    # 2. Extract Exercises and Reps from the main line (e.g., "Superset curl x20 side lateral x10")
+    clean_line = re.sub(r'(?i)superset', '', exercise_line).strip()
+    
+    # Matches letters/spaces followed by 'x' and digits
+    pattern = re.compile(r'([a-zA-Z\s\-]+)x(\d+)')
+    matches = pattern.findall(clean_line)
+    
+    # If regex fails to find the pattern, return nothing so it falls back to normal parsing
+    if not matches:
+        return None
+        
+    for match in matches:
+        ex_name = match[0].strip().title()
+        reps = int(match[1])
+        
+        # Build the sets array (e.g., "40x20, 40x20, 40x20")
+        sets_array = [f"{total_weight:g}x{reps}"] * sets
+        tonnage = (total_weight * reps) * sets
+        
+        records.append({
+            "Week": week,
+            "Day": day,
+            "Exercise": ex_name,
+            "Sets & Reps (Weight x Reps)": ", ".join(sets_array),
+            "Tonnage (lbs)": tonnage,
+            "Target Body Parts": get_target_body_parts(ex_name, current_mapping),
+            "Notes/Assumptions": f"Unpacked from Superset. {notes_line.strip()}"
+        })
+        
+    return records
+
 def parse_workout_text(raw_text, current_mapping):
     records = []
     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
@@ -236,7 +289,7 @@ def parse_workout_text(raw_text, current_mapping):
                     "Week": week,
                     "Day": day,
                     "Exercise": exercise,
-                    "Sets & Reps": cols[2] if len(cols) > 2 else "",
+                    "Sets & Reps (Weight x Reps)": cols[2] if len(cols) > 2 else "",
                     "Tonnage (lbs)": cols[3] if len(cols) > 3 else "0",
                     "Target Body Parts": cols[4] if len(cols) > 4 else get_target_body_parts(exercise, current_mapping),
                     "Notes/Assumptions": cols[5] if len(cols) > 5 else ""
@@ -244,35 +297,32 @@ def parse_workout_text(raw_text, current_mapping):
         return records
 
     # --- SCENARIO 2: Smashed Text ---
-    # Define the strict pattern for smashed rows
-    smashed_pattern = re.compile(
-        r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
-        re.IGNORECASE
-    )
-    
-    # Check if ANY line perfectly matches the full smashed pattern to trigger this mode
-    is_smashed = False
-    for line in lines:
-        if smashed_pattern.match(line):
-            is_smashed = True
-            break
+    # We check if lines look like "11Walking Lunge" (digits + letter)
+    # BUT we explicitly ignore lines like "45x10" to stop vertical logs from breaking!
+    def is_smashed_line(line):
+        starts_like_smashed = re.match(r'^\d{2,3}[A-Za-z]', line)
+        is_weight_reps = re.match(r'^\d+(?:\.\d+)?\s*x\s*\d+$', line, re.IGNORECASE)
+        return starts_like_smashed and not is_weight_reps
 
-    if is_smashed:
+    if any(is_smashed_line(line) for line in lines):
+        smashed_pattern = re.compile(
+            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
+            re.IGNORECASE
+        )
         for line in lines:
-            match = smashed_pattern.match(line)
+            match = smashed_pattern.search(line)
             if match:
                 records.append({
                     "Week": match.group(1),
                     "Day": match.group(2),
                     "Exercise": match.group(3).strip(),
-                    "Sets & Reps": match.group(4).strip(),
+                    "Sets & Reps (Weight x Reps)": match.group(4).strip(),
                     "Tonnage (lbs)": match.group(5),
                     "Target Body Parts": match.group(6).strip(),
                     "Notes/Assumptions": match.group(7).strip()
                 })
             else:
-                # If one line in a smashed block fails the regex, dump it into the table so the user can fix it
-                records.append({"Week": "", "Day": "", "Exercise": line, "Sets & Reps": "", "Tonnage (lbs)": "", "Target Body Parts": "❓ Needs Mapping", "Notes/Assumptions": "FAILED TO PARSE"})
+                records.append({"Week": "", "Day": "", "Exercise": line, "Sets & Reps (Weight x Reps)": "", "Tonnage (lbs)": "", "Target Body Parts": "❓ Needs Mapping", "Notes/Assumptions": "FAILED TO PARSE"})
         return records
 
     # --- SCENARIO 3: Vertical Notes ---
@@ -282,16 +332,26 @@ def parse_workout_text(raw_text, current_mapping):
     current_tonnage = 0.0
 
     def save_current_exercise():
-        if current_exercise:
-            records.append({
-                "Week": week,
-                "Day": day,
-                "Exercise": current_exercise,
-                "Sets & Reps": ", ".join(current_sets),
-                "Tonnage (lbs)": current_tonnage,
-                "Target Body Parts": get_target_body_parts(current_exercise, current_mapping),
-                "Notes/Assumptions": " ".join(current_notes)
-            })
+        if not current_exercise:
+            return
+
+        # Check if this is a superset that needs unpacking
+        if "superset" in current_exercise.lower() and current_notes:
+            unpacked = unpack_superset(current_exercise, " ".join(current_notes), week, day, current_mapping)
+            if unpacked:
+                records.extend(unpacked)
+                return # Exit early so we don't save the smashed version
+
+        # Standard save
+        records.append({
+            "Week": week,
+            "Day": day,
+            "Exercise": current_exercise,
+            "Sets & Reps (Weight x Reps)": ", ".join(current_sets),
+            "Tonnage (lbs)": current_tonnage,
+            "Target Body Parts": get_target_body_parts(current_exercise, current_mapping),
+            "Notes/Assumptions": " ".join(current_notes)
+        })
 
     for line in lines:
         week_day_match = re.search(r'Week\s+(\d+)\s+day\s+(\d+)', line, re.IGNORECASE)
