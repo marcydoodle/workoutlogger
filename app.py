@@ -244,20 +244,22 @@ def parse_workout_text(raw_text, current_mapping):
         return records
 
     # --- SCENARIO 2: Smashed Text ---
-    # We check if lines look like "11Walking Lunge" (digits + letter)
-    # BUT we explicitly ignore lines like "45x10" to stop vertical logs from breaking!
-    def is_smashed_line(line):
-        starts_like_smashed = re.match(r'^\d{2,3}[A-Za-z]', line)
-        is_weight_reps = re.match(r'^\d+(?:\.\d+)?\s*x\s*\d+$', line, re.IGNORECASE)
-        return starts_like_smashed and not is_weight_reps
+    # Define the strict pattern for smashed rows
+    smashed_pattern = re.compile(
+        r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
+        re.IGNORECASE
+    )
+    
+    # Check if ANY line perfectly matches the full smashed pattern to trigger this mode
+    is_smashed = False
+    for line in lines:
+        if smashed_pattern.match(line):
+            is_smashed = True
+            break
 
-    if any(is_smashed_line(line) for line in lines):
-        smashed_pattern = re.compile(
-            r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
-            re.IGNORECASE
-        )
+    if is_smashed:
         for line in lines:
-            match = smashed_pattern.search(line)
+            match = smashed_pattern.match(line)
             if match:
                 records.append({
                     "Week": match.group(1),
@@ -269,6 +271,7 @@ def parse_workout_text(raw_text, current_mapping):
                     "Notes/Assumptions": match.group(7).strip()
                 })
             else:
+                # If one line in a smashed block fails the regex, dump it into the table so the user can fix it
                 records.append({"Week": "", "Day": "", "Exercise": line, "Sets & Reps": "", "Tonnage (lbs)": "", "Target Body Parts": "❓ Needs Mapping", "Notes/Assumptions": "FAILED TO PARSE"})
         return records
 
