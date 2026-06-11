@@ -157,119 +157,122 @@ INITIAL_MAPPING = {
 }
 
 def load_mapping():
-    """Loads the exercise mapping from JSONBin."""
     try:
         response = requests.get(BASE_URL + MAPPING_BIN_ID, headers=HEADERS)
         if response.status_code == 200:
             return response.json().get("record", INITIAL_MAPPING)
         else:
-            st.error(f"Failed to load mapping. Status: {response.status_code}")
             return INITIAL_MAPPING.copy()
-    except Exception as e:
-        st.error(f"API Connection Error: {e}")
+    except:
         return INITIAL_MAPPING.copy()
 
 def save_mapping(mapping_dict):
-    """Overwrites the mapping bin with the newly learned exercises."""
     try:
-        response = requests.put(BASE_URL + MAPPING_BIN_ID, headers=HEADERS, json=mapping_dict)
-        if response.status_code != 200:
-            st.error(f"Failed to save mapping. Status: {response.status_code}")
-    except Exception as e:
-        st.error(f"API Connection Error: {e}")
+        requests.put(BASE_URL + MAPPING_BIN_ID, headers=HEADERS, json=mapping_dict)
+    except:
+        pass
 
 def load_data():
-    """Loads the historical workout records from JSONBin."""
     try:
         response = requests.get(BASE_URL + WORKOUT_BIN_ID, headers=HEADERS)
         if response.status_code == 200:
             return response.json().get("record", [])
         else:
-            st.error(f"Failed to load workout data. Status: {response.status_code}")
             return []
-    except Exception as e:
-        st.error(f"API Connection Error: {e}")
+    except:
         return []
 
 def save_data(new_records):
-    """Pulls existing data, appends the new records, and pushes it back to JSONBin."""
     data = load_data()
     data.extend(new_records)
-    
     try:
-        response = requests.put(BASE_URL + WORKOUT_BIN_ID, headers=HEADERS, json=data)
-        if response.status_code != 200:
-            st.error(f"Failed to save workout data. Status: {response.status_code}")
+        requests.put(BASE_URL + WORKOUT_BIN_ID, headers=HEADERS, json=data)
     except Exception as e:
-        st.error(f"API Connection Error: {e}")
+        st.error(f"Failed to save to cloud: {e}")
 
 def get_target_body_parts(exercise_name, current_mapping):
     ex_clean = exercise_name.strip().lower()
-    
-    # Exact match
     for known_ex, body_part in current_mapping.items():
         if known_ex.lower() == ex_clean:
             return body_part
-            
-    # Partial match
     for known_ex, body_part in current_mapping.items():
         if known_ex.lower() in ex_clean or ex_clean in known_ex.lower():
             return body_part
-
     return "❓ Needs Mapping"
 
-def unpack_superset(exercise_line, notes_line, week, day, current_mapping):
+def unpack_superset(record, current_mapping):
     """
-    Breaks a complex superset string into individual exercises, calculates tonnage,
-    and returns a list of individual record dictionaries.
+    Universally breaks a complex superset dictionary record into individual exercises.
     """
-    records = []
+    ex_str = record.get("Exercise", "")
+    sets_str = str(record.get("Sets & Reps (Weight x Reps)", ""))
+    notes_str = str(record.get("Notes/Assumptions", ""))
     
-    # 1. Extract Sets and Weight from the notes line (e.g., "20 lbs each hand 3 sets")
+    combined = f"{ex_str} {sets_str} {notes_str}"
+    
+    # Extract Sets
     sets = 1
-    weight_per_hand = 0.0
-    
-    sets_match = re.search(r'(\d+)\s*sets?', notes_line, re.IGNORECASE)
+    sets_match = re.search(r'(\d+)\s*(?:sets?|rounds?)', combined, re.IGNORECASE)
     if sets_match:
         sets = int(sets_match.group(1))
         
-    lbs_match = re.search(r'(\d+(?:\.\d+)?)\s*lbs?', notes_line, re.IGNORECASE)
+    # Extract Weight
+    weight_per_hand = 0.0
+    lbs_match = re.search(r'(\d+(?:\.\d+)?)\s*lbs?', combined, re.IGNORECASE)
     if lbs_match:
         weight_per_hand = float(lbs_match.group(1))
         
-    # Assume dumbbells (weight is doubled for total load)
-    total_weight = weight_per_hand * 2
+    total_weight = weight_per_hand * 2 if weight_per_hand > 0 else 0.0
     
-    # 2. Extract Exercises and Reps from the main line (e.g., "Superset curl x20 side lateral x10")
-    clean_line = re.sub(r'(?i)superset', '', exercise_line).strip()
+    # Clean the string to isolate the lifts
+    parse_str = f"{ex_str} {sets_str}".replace('(', '').replace(')', '')
+    parse_str = re.sub(r'(?i)superset', '', parse_str)
+    parse_str = re.sub(r'(?i)\d+\s*sets?:?', '', parse_str) # Remove "5 Sets:" prefix
     
-    # Matches letters/spaces followed by 'x' and digits
-    pattern = re.compile(r'([a-zA-Z\s\-]+)x(\d+)')
-    matches = pattern.findall(clean_line)
-    
-    # If regex fails to find the pattern, return nothing so it falls back to normal parsing
-    if not matches:
-        return None
-        
-    for match in matches:
-        ex_name = match[0].strip().title()
-        reps = int(match[1])
-        
-        # Build the sets array (e.g., "40x20, 40x20, 40x20")
+    # Split string by commas or slashes if they exist
+    if ',' in parse_str or '/' in parse_str:
+        chunks = re.split(r'[,/]', parse_str)
+    else:
+        # Otherwise, split by matching non-digits leading up to an 'x' (e.g. "curl x20")
+        chunks = re.findall(r'(\D+x\s*\d+)', parse_str, re.IGNORECASE)
+        if not chunks:
+            chunks = [parse_str]
+            
+    unpacked = []
+    for chunk in chunks:
+        # Match Format: "Curl x20"
+        match = re.search(r'([a-zA-Z\s\-]+)x\s*(\d+)', chunk, re.IGNORECASE)
+        if match:
+            ex_name = match.group(1)
+            reps = int(match.group(2))
+        else:
+            # Match Format: "20 Curls"
+            match2 = re.search(r'(\d+)\s+([a-zA-Z\s\-]+)', chunk, re.IGNORECASE)
+            if match2:
+                reps = int(match2.group(1))
+                ex_name = match2.group(2)
+            else:
+                continue
+                
+        # Clean up exercise name artifacts
+        ex_name = ex_name.replace('Db','').replace('lb','').strip().title()
+        if not ex_name:
+            continue
+            
         sets_array = [f"{total_weight:g}x{reps}"] * sets
         tonnage = (total_weight * reps) * sets
         
-        records.append({
-            "Week": week,
-            "Day": day,
+        unpacked.append({
+            "Week": record.get("Week", ""),
+            "Day": record.get("Day", ""),
             "Exercise": ex_name,
             "Sets & Reps (Weight x Reps)": ", ".join(sets_array),
             "Tonnage (lbs)": tonnage,
             "Target Body Parts": get_target_body_parts(ex_name, current_mapping),
-            "Notes/Assumptions": f"Unpacked from Superset. {notes_line.strip()}"
+            "Notes/Assumptions": f"Unpacked from Superset. {notes_str}".strip()
         })
         
-    return records
+    return unpacked if unpacked else None
 
 def parse_workout_text(raw_text, current_mapping):
     records = []
@@ -290,93 +293,85 @@ def parse_workout_text(raw_text, current_mapping):
                     "Day": day,
                     "Exercise": exercise,
                     "Sets & Reps (Weight x Reps)": cols[2] if len(cols) > 2 else "",
-                    "Tonnage (lbs)": cols[3] if len(cols) > 3 else "0",
+                    "Tonnage (lbs)": float(cols[3]) if len(cols) > 3 and cols[3].replace('.','').isdigit() else 0.0,
                     "Target Body Parts": cols[4] if len(cols) > 4 else get_target_body_parts(exercise, current_mapping),
                     "Notes/Assumptions": cols[5] if len(cols) > 5 else ""
                 })
-        return records
-
+    
     # --- SCENARIO 2: Smashed Text ---
-    # We check if lines look like "11Walking Lunge" (digits + letter)
-    # BUT we explicitly ignore lines like "45x10" to stop vertical logs from breaking!
-    def is_smashed_line(line):
-        starts_like_smashed = re.match(r'^\d{2,3}[A-Za-z]', line)
-        is_weight_reps = re.match(r'^\d+(?:\.\d+)?\s*x\s*\d+$', line, re.IGNORECASE)
-        return starts_like_smashed and not is_weight_reps
-
-    if any(is_smashed_line(line) for line in lines):
+    elif any(re.match(r'^\d{2,3}[A-Za-z]', line) and not re.match(r'^\d+(?:\.\d+)?\s*x\s*\d+$', line, re.IGNORECASE) for line in lines):
         smashed_pattern = re.compile(
             r'^(\d{1,2})(\d)([A-Za-z\s\-\(\)]+?)((?:\d.*?)?)(\d+)((?:Quads|Glutes|Hamstrings|Chest|Shoulders|Arms|Back|Core|Abs)(?:,\s*[A-Za-z]+)*)(.*)$',
             re.IGNORECASE
         )
         for line in lines:
-            match = smashed_pattern.search(line)
+            match = smashed_pattern.match(line)
             if match:
                 records.append({
                     "Week": match.group(1),
                     "Day": match.group(2),
                     "Exercise": match.group(3).strip(),
                     "Sets & Reps (Weight x Reps)": match.group(4).strip(),
-                    "Tonnage (lbs)": match.group(5),
+                    "Tonnage (lbs)": float(match.group(5)),
                     "Target Body Parts": match.group(6).strip(),
                     "Notes/Assumptions": match.group(7).strip()
                 })
             else:
-                records.append({"Week": "", "Day": "", "Exercise": line, "Sets & Reps (Weight x Reps)": "", "Tonnage (lbs)": "", "Target Body Parts": "❓ Needs Mapping", "Notes/Assumptions": "FAILED TO PARSE"})
-        return records
-
-    # --- SCENARIO 3: Vertical Notes ---
-    week, day = "", ""
-    current_exercise = None
-    current_sets, current_notes = [], []
-    current_tonnage = 0.0
-
-    def save_current_exercise():
-        if not current_exercise:
-            return
-
-        # Check if this is a superset that needs unpacking
-        if "superset" in current_exercise.lower() and current_notes:
-            unpacked = unpack_superset(current_exercise, " ".join(current_notes), week, day, current_mapping)
-            if unpacked:
-                records.extend(unpacked)
-                return # Exit early so we don't save the smashed version
-
-        # Standard save
-        records.append({
-            "Week": week,
-            "Day": day,
-            "Exercise": current_exercise,
-            "Sets & Reps (Weight x Reps)": ", ".join(current_sets),
-            "Tonnage (lbs)": current_tonnage,
-            "Target Body Parts": get_target_body_parts(current_exercise, current_mapping),
-            "Notes/Assumptions": " ".join(current_notes)
-        })
-
-    for line in lines:
-        week_day_match = re.search(r'Week\s+(\d+)\s+day\s+(\d+)', line, re.IGNORECASE)
-        if week_day_match:
-            week, day = week_day_match.group(1), week_day_match.group(2)
-            continue
-
-        set_match = re.match(r'^(\d+(?:\.\d+)?)\s*x\s*(\d+)$', line, re.IGNORECASE)
-        if set_match:
-            weight, reps = float(set_match.group(1)), int(set_match.group(2))
-            current_sets.append(f"{weight:g}x{reps}")
-            current_tonnage += (weight * reps)
-        elif any(keyword in line.lower() for keyword in ["lbs", "sets", "reps", "each hand"]):
-            current_notes.append(line)
-        else:
-            save_current_exercise() 
-            current_exercise = line
-            current_sets, current_notes = [], []
-            current_tonnage = 0.0
-            
-    # Save the final exercise at the end of the list
-    save_current_exercise()
+                records.append({"Week": "", "Day": "", "Exercise": line, "Sets & Reps (Weight x Reps)": "", "Tonnage (lbs)": 0.0, "Target Body Parts": "❓ Needs Mapping", "Notes/Assumptions": "FAILED TO PARSE"})
     
-    return records
+    # --- SCENARIO 3: Vertical Notes ---
+    else:
+        week, day = "", ""
+        current_exercise = None
+        current_sets, current_notes = [], []
+        current_tonnage = 0.0
 
+        def save_current_exercise():
+            if current_exercise:
+                records.append({
+                    "Week": week,
+                    "Day": day,
+                    "Exercise": current_exercise,
+                    "Sets & Reps (Weight x Reps)": ", ".join(current_sets),
+                    "Tonnage (lbs)": current_tonnage,
+                    "Target Body Parts": get_target_body_parts(current_exercise, current_mapping),
+                    "Notes/Assumptions": " ".join(current_notes)
+                })
+
+        for line in lines:
+            week_day_match = re.search(r'Week\s+(\d+)\s+day\s+(\d+)', line, re.IGNORECASE)
+            if week_day_match:
+                week, day = week_day_match.group(1), week_day_match.group(2)
+                continue
+
+            set_match = re.match(r'^(\d+(?:\.\d+)?)\s*x\s*(\d+)$', line, re.IGNORECASE)
+            if set_match:
+                weight, reps = float(set_match.group(1)), int(set_match.group(2))
+                current_sets.append(f"{weight:g}x{reps}")
+                current_tonnage += (weight * reps)
+            elif any(keyword in line.lower() for keyword in ["lbs", "sets", "reps", "each hand"]):
+                current_notes.append(line)
+            else:
+                save_current_exercise() 
+                current_exercise = line
+                current_sets, current_notes = [], []
+                current_tonnage = 0.0
+                
+        save_current_exercise()
+
+    # --- FINAL PASS: Unpack Supersets Globally ---
+    final_records = []
+    for r in records:
+        if "superset" in str(r.get("Exercise", "")).lower():
+            unpacked = unpack_superset(r, current_mapping)
+            if unpacked:
+                final_records.extend(unpacked)
+            else:
+                final_records.append(r)
+        else:
+            final_records.append(r)
+            
+    return final_records
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Workout Logger", layout="wide")
@@ -386,7 +381,6 @@ st.title("🏋️ Workout Data Parser (Cloud Connected)")
 current_mapping = load_mapping()
 
 st.markdown("Paste your workout notes below.")
-
 raw_input = st.text_area("Raw Workout Data", height=200)
 
 if st.button("Parse Data"):
