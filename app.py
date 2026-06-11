@@ -7,7 +7,7 @@ import requests
 # --- JSONBin Configuration ---
 # Securely pulls your API key from Streamlit's dashboard secrets
 JSONBIN_API_KEY = st.secrets["JSONBIN_API_KEY"] 
-WORKOUT_BIN_ID = "6a2b09def5f4af5e29e1925d"
+WORKOUT_BIN_ID = "6a2b3589f5f4af5e29e2a970"
 MAPPING_BIN_ID = "6a2b099bda38895dfeb00e71"
 
 BASE_URL = "https://api.jsonbin.io/v3/b/"
